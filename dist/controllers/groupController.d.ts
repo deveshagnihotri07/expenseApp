@@ -1,0 +1,7 @@
+import { Response } from 'express';
+import { AuthRequest } from '../middleware/auth';
+export declare const createGroupValidation: import("express-validator").ValidationChain[];
+export declare const createGroup: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getGroups: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getGroupById: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const deleteGroup: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
