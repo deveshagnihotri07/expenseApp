@@ -512,7 +512,7 @@ describe('Expenses API', () => {
       expect(res.body.message).toBe('Expense deleted successfully');
     });
 
-    it('returns 404 when deleting an expense owned by someone else', async () => {
+    it('returns 403 when deleting an expense owned by someone else', async () => {
       const { token, user } = await registerUser();
       const other = await registerUser();
 
@@ -525,8 +525,8 @@ describe('Expenses API', () => {
         .delete(`/api/expenses/${created.body.id}`)
         .set(auth(token));
 
-      expect(res.status).toBe(404);
-      expect(res.body.message).toBe('Expense not found or not authorized');
+      expect(res.status).toBe(403);
+      expect(res.body.message).toBe('Not authorized to delete this expense');
     });
   });
 });

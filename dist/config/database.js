@@ -13,7 +13,7 @@ const pool = new pg_1.Pool({
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    ssl: false,
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 pool.on('error', (err) => {
     console.error('Unexpected error on idle client', err);

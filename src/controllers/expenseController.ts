@@ -534,16 +534,30 @@ export const deleteExpense = async (req: AuthRequest, res: Response) => {
     const { expenseId } = req.params;
     const userId = req.user!.id;
 
-    const result = await query(
-      'DELETE FROM expenses WHERE id = $1 AND created_by = $2 RETURNING id',
-      [expenseId, userId]
+    const existing = await query(
+      'SELECT id, created_by, group_id FROM expenses WHERE id = $1',
+      [expenseId]
     );
 
-    if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ message: 'Expense not found or not authorized' });
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ message: 'Expense not found' });
     }
+
+    const isGroupExpense = !!existing.rows[0].group_id;
+    if (isGroupExpense) {
+      const memberIds = await getGroupMemberIds(existing.rows[0].group_id);
+      if (!memberIds.has(userId)) {
+        return res
+          .status(403)
+          .json({ message: 'Not authorized to delete this expense' });
+      }
+    } else if (existing.rows[0].created_by !== userId) {
+      return res
+        .status(403)
+        .json({ message: 'Not authorized to delete this expense' });
+    }
+
+    await query('DELETE FROM expenses WHERE id = $1', [expenseId]);
 
     res.json({ message: 'Expense deleted successfully' });
   } catch (error) {
