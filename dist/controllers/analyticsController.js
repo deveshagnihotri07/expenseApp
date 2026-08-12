@@ -12,9 +12,9 @@ const spendTypeFilter = (type) => {
 };
 const computeFriendBalances = async (userId) => {
     const splitsAllResult = await (0, database_1.query)(`SELECT e.id, e.created_by, es.user_id as split_user_id, es.amount as split_amount
-     FROM expense_splits es
-     JOIN expenses e ON es.expense_id = e.id
-     WHERE e.created_by = $1 OR es.user_id = $1`, [userId]);
+       FROM expense_splits es
+       JOIN expenses e ON es.expense_id = e.id
+       WHERE (e.created_by = $1 OR es.user_id = $1) AND es.is_settled = false`, [userId]);
     const byExpense = {};
     for (const row of splitsAllResult.rows) {
         if (!byExpense[row.id]) {
@@ -40,6 +40,19 @@ const computeFriendBalances = async (userId) => {
                 balanceMap[exp.createdBy] =
                     (balanceMap[exp.createdBy] || 0) - mySplit.amount;
             }
+        }
+    }
+    const settleResult = await (0, database_1.query)(`SELECT from_user_id, to_user_id, amount
+     FROM settlements
+     WHERE from_user_id = $1 OR to_user_id = $1`, [userId]);
+    for (const row of settleResult.rows) {
+        const amt = parseFloat(row.amount);
+        const other = row.from_user_id === userId ? row.to_user_id : row.from_user_id;
+        if (row.from_user_id === userId) {
+            balanceMap[other] = (balanceMap[other] || 0) + amt;
+        }
+        else {
+            balanceMap[other] = (balanceMap[other] || 0) - amt;
         }
     }
     const friendIds = Object.keys(balanceMap).filter((id) => id);

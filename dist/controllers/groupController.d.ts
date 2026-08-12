@@ -5,3 +5,6 @@ export declare const createGroup: (req: AuthRequest, res: Response) => Promise<R
 export declare const getGroups: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getGroupById: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const deleteGroup: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getGroupBalances: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getGroupSettlements: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const settleGroupMember: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;

@@ -397,8 +397,6 @@ const settleExpense = async (req, res) => {
                 expenseId,
             ]);
         }
-        await (0, database_1.query)(`INSERT INTO settlements (from_user_id, to_user_id, amount, expense_id)
-       SELECT $1, e.created_by, $2, e.id FROM expenses e WHERE e.id = $3`, [fromUserId, amount, expenseId]);
         res.json({ message: 'Expense settled successfully' });
     }
     catch (error) {
