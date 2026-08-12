@@ -83,8 +83,13 @@ CREATE TABLE IF NOT EXISTS settlements (
     amount DECIMAL(14,2) NOT NULL,
     expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL,
     group_id UUID REFERENCES groups(id) ON DELETE SET NULL,
+    settled_date DATE DEFAULT CURRENT_DATE,
+    payment_method TEXT DEFAULT 'Other',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE settlements ADD COLUMN IF NOT EXISTS settled_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE settlements ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'Other';
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_expenses_group ON expenses(group_id);
@@ -122,20 +127,36 @@ ON categories(name) WHERE is_default = true;
 
 -- Insert default categories
 INSERT INTO categories (name, icon, color, is_default) VALUES
-    ('Food & Dining', 'restaurant', '#FF6B6B', true),
-    ('Transportation', 'car', '#4ECDC4', true),
-    ('Shopping', 'bag-handle', '#FFE66D', true),
-    ('Entertainment', 'film', '#9B5DE5', true),
-    ('Bills & Utilities', 'receipt', '#00BBF9', true),
-    ('Travel', 'airplane', '#00C9A7', true),
-    ('Health & Medical', 'heart', '#FF6B6B', true),
-    ('Education', 'book', '#4ECDC4', true),
-    ('Personal Care', 'sparkles', '#FFE66D', true),
-    ('Gifts', 'gift', '#9B5DE5', true),
-    ('Other', 'more-horizontal', '#CCCCCC', true)
+    ('Food & Dining', 'restaurant', '#F43F5E', true),
+    ('Transportation', 'car', '#0EA5E9', true),
+    ('Shopping', 'bag-handle', '#F59E0B', true),
+    ('Entertainment', 'film', '#8B5CF6', true),
+    ('Bills & Utilities', 'receipt', '#3B82F6', true),
+    ('Travel', 'airplane', '#14B8A6', true),
+    ('Health & Medical', 'heart', '#EC4899', true),
+    ('Education', 'book', '#6366F1', true),
+    ('Personal Care', 'sparkles', '#10B981', true),
+    ('Gifts', 'gift', '#F97316', true),
+    ('Other', 'more-horizontal', '#9CA3AF', true)
 ON CONFLICT DO NOTHING;
 
--- Refresh icons for existing default categories
+-- Refresh icons and ensure unique colors for existing default categories
+UPDATE categories SET color = CASE name
+    WHEN 'Food & Dining' THEN '#F43F5E'
+    WHEN 'Transportation' THEN '#0EA5E9'
+    WHEN 'Shopping' THEN '#F59E0B'
+    WHEN 'Entertainment' THEN '#8B5CF6'
+    WHEN 'Bills & Utilities' THEN '#3B82F6'
+    WHEN 'Travel' THEN '#14B8A6'
+    WHEN 'Health & Medical' THEN '#EC4899'
+    WHEN 'Education' THEN '#6366F1'
+    WHEN 'Personal Care' THEN '#10B981'
+    WHEN 'Gifts' THEN '#F97316'
+    WHEN 'Other' THEN '#9CA3AF'
+    ELSE color
+END
+WHERE is_default = true;
+
 UPDATE categories SET icon = 'bag-handle' WHERE name = 'Shopping' AND is_default = true;
 UPDATE categories SET icon = 'film' WHERE name = 'Entertainment' AND is_default = true;
 UPDATE categories SET icon = 'sparkles' WHERE name = 'Personal Care' AND is_default = true;

@@ -11,13 +11,13 @@ const spendTypeFilter = (type: string) => {
 };
 
 const computeFriendBalances = async (userId: string) => {
-  const splitsAllResult = await query(
-    `SELECT e.id, e.created_by, es.user_id as split_user_id, es.amount as split_amount
-     FROM expense_splits es
-     JOIN expenses e ON es.expense_id = e.id
-     WHERE e.created_by = $1 OR es.user_id = $1`,
-    [userId]
-  );
+    const splitsAllResult = await query(
+      `SELECT e.id, e.created_by, es.user_id as split_user_id, es.amount as split_amount
+       FROM expense_splits es
+       JOIN expenses e ON es.expense_id = e.id
+       WHERE (e.created_by = $1 OR es.user_id = $1) AND es.is_settled = false`,
+      [userId]
+    );
 
   const byExpense: Record<
     string,
@@ -47,6 +47,22 @@ const computeFriendBalances = async (userId: string) => {
         balanceMap[exp.createdBy] =
           (balanceMap[exp.createdBy] || 0) - mySplit.amount;
       }
+    }
+  }
+
+  const settleResult = await query(
+    `SELECT from_user_id, to_user_id, amount
+     FROM settlements
+     WHERE from_user_id = $1 OR to_user_id = $1`,
+    [userId]
+  );
+  for (const row of settleResult.rows) {
+    const amt = parseFloat(row.amount);
+    const other = row.from_user_id === userId ? row.to_user_id : row.from_user_id;
+    if (row.from_user_id === userId) {
+      balanceMap[other] = (balanceMap[other] || 0) + amt;
+    } else {
+      balanceMap[other] = (balanceMap[other] || 0) - amt;
     }
   }
 
