@@ -92,13 +92,30 @@ describe('Expense API', () => {
       .expect(400);
   });
 
-  it('should get all expenses', async () => {
+  it('should get all expenses sorted newest first', async () => {
     const res = await request(app)
       .get('/api/expenses')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(Array.isArray(res.body.expenses)).toBe(true);
+    expect(typeof res.body.total).toBe('number');
+    expect(res.body.page).toBe(1);
+    expect(typeof res.body.hasMore).toBe('boolean');
+
+    const dates = res.body.expenses.map((e: any) => e.expenseDate);
+    const sorted = [...dates].sort((a: string, b: string) => (a < b ? 1 : -1));
+    expect(dates).toEqual(sorted);
+  });
+
+  it('should paginate expenses', async () => {
+    const res = await request(app)
+      .get('/api/expenses?page=1&limit=1')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.expenses.length).toBeLessThanOrEqual(1);
+    expect(res.body.limit).toBe(1);
   });
 
   it('should get expenses for a group', async () => {
@@ -107,6 +124,6 @@ describe('Expense API', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(Array.isArray(res.body.expenses)).toBe(true);
   });
 });

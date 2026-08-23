@@ -352,28 +352,39 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
 export const getExpenses = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { groupId, personal } = req.query;
+    const { groupId } = req.query;
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(req.query.limit as string, 10) || 20)
+    );
+    const offset = (page - 1) * limit;
 
-    let result;
+    let whereClause: string;
+    const params: any[] = [];
     if (groupId) {
-      result = await query(
-        `SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-         FROM expenses e
-         LEFT JOIN categories c ON e.category_id = c.id
-         WHERE e.group_id = $1
-         ORDER BY e.created_at DESC`,
-        [groupId]
-      );
+      whereClause = 'e.group_id = $1';
+      params.push(groupId);
     } else {
-      result = await query(
-        `SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-         FROM expenses e
-         LEFT JOIN categories c ON e.category_id = c.id
-         WHERE e.created_by = $1 AND e.is_personal = true
-         ORDER BY e.created_at DESC`,
-        [userId]
-      );
+      whereClause = 'e.created_by = $1 AND e.is_personal = true';
+      params.push(userId);
     }
+
+    const countResult = await query(
+      `SELECT COUNT(*) as total FROM expenses e WHERE ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total, 10);
+
+    const result = await query(
+      `SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+       FROM expenses e
+       LEFT JOIN categories c ON e.category_id = c.id
+       WHERE ${whereClause}
+       ORDER BY e.expense_date DESC, e.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
+    );
 
     const expenses = await Promise.all(
       result.rows.map(async (expense: any) => {
@@ -416,7 +427,13 @@ export const getExpenses = async (req: AuthRequest, res: Response) => {
       })
     );
 
-    res.json(expenses);
+    res.json({
+      expenses,
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total,
+    });
   } catch (error) {
     console.error('Get expenses error:', error);
     res.status(500).json({ message: 'Server error' });

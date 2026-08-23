@@ -197,4 +197,39 @@ describe('Group API', () => {
     await pool.query('DELETE FROM groups WHERE id = $1', [reverseGroupId]);
     await pool.query('DELETE FROM users WHERE id = $1', [friend2Id]);
   });
+
+  it('should add an existing user as a group member', async () => {
+    const friend = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'New Member',
+        email: `group_newmember_${Date.now()}@example.com`,
+        password: 'password123',
+      })
+      .expect(201);
+    const newMemberId = friend.body.user.id;
+
+    const groupRes = await request(app)
+      .post('/api/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Add Member Group', memberIds: [] })
+      .expect(201);
+    const gId = groupRes.body.id;
+
+    await request(app)
+      .post(`/api/groups/${gId}/members`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ userId: newMemberId })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/groups/${gId}/members`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ userId: newMemberId })
+      .expect(400);
+
+    await pool.query('DELETE FROM group_members WHERE group_id = $1', [gId]);
+    await pool.query('DELETE FROM groups WHERE id = $1', [gId]);
+    await pool.query('DELETE FROM users WHERE id = $1', [newMemberId]);
+  });
 });

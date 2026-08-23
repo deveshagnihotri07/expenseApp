@@ -117,7 +117,7 @@ export const getGroupById = async (req: AuthRequest, res: Response) => {
        FROM expenses e
        LEFT JOIN categories c ON e.category_id = c.id
        WHERE e.group_id = $1
-       ORDER BY e.created_at DESC`,
+       ORDER BY e.expense_date DESC, e.created_at DESC`,
       [group.id]
     );
 
@@ -176,6 +176,61 @@ export const getGroupById = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     console.error('Get group by id error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const addGroupMember = async (req: AuthRequest, res: Response) => {
+  try {
+    const { groupId } = req.params;
+    const { userId } = req.body;
+    const requesterId = req.user!.id;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+
+    const memberCheck = await query(
+      'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+      [groupId, requesterId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Group not found or not a member' });
+    }
+
+    const userCheck = await query('SELECT id FROM users WHERE id = $1', [userId]);
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const existsCheck = await query(
+      'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+      [groupId, userId]
+    );
+    if (existsCheck.rows.length > 0) {
+      return res.status(400).json({ message: 'User is already a member' });
+    }
+
+    await query(
+      `INSERT INTO group_members (group_id, user_id, role)
+       VALUES ($1, $2, 'member')`,
+      [groupId, userId]
+    );
+
+    const newMember = await query(
+      `SELECT u.id, u.name, u.email
+       FROM users u WHERE u.id = $1`,
+      [userId]
+    );
+
+    res.status(201).json({
+      id: newMember.rows[0].id,
+      name: newMember.rows[0].name,
+      email: newMember.rows[0].email,
+      role: 'member',
+    });
+  } catch (error) {
+    console.error('Add group member error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

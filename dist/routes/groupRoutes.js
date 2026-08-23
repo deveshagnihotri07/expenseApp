@@ -9,6 +9,7 @@ router.get('/', auth_1.authenticate, groupController_1.getGroups);
 router.get('/:groupId/balances', auth_1.authenticate, groupController_1.getGroupBalances);
 router.get('/:groupId/settlements', auth_1.authenticate, groupController_1.getGroupSettlements);
 router.post('/:groupId/settle', auth_1.authenticate, groupController_1.settleGroupMember);
+router.post('/:groupId/members', auth_1.authenticate, groupController_1.addGroupMember);
 router.get('/:groupId', auth_1.authenticate, groupController_1.getGroupById);
 router.delete('/:groupId', auth_1.authenticate, groupController_1.deleteGroup);
 exports.default = router;

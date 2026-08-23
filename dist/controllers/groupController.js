@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.settleGroupMember = exports.getGroupSettlements = exports.getGroupBalances = exports.deleteGroup = exports.getGroupById = exports.getGroups = exports.createGroup = exports.createGroupValidation = void 0;
+exports.settleGroupMember = exports.getGroupSettlements = exports.getGroupBalances = exports.deleteGroup = exports.addGroupMember = exports.getGroupById = exports.getGroups = exports.createGroup = exports.createGroupValidation = void 0;
 const database_1 = require("../config/database");
 const express_validator_1 = require("express-validator");
 exports.createGroupValidation = [
@@ -85,7 +85,7 @@ const getGroupById = async (req, res) => {
        FROM expenses e
        LEFT JOIN categories c ON e.category_id = c.id
        WHERE e.group_id = $1
-       ORDER BY e.created_at DESC`, [group.id]);
+       ORDER BY e.expense_date DESC, e.created_at DESC`, [group.id]);
         const expensesWithSplits = await Promise.all(expensesResult.rows.map(async (expense) => {
             const splitsResult = await (0, database_1.query)(`SELECT es.user_id, es.amount, es.share_type, es.is_settled,
                   u.name, u.email
@@ -140,6 +140,43 @@ const getGroupById = async (req, res) => {
     }
 };
 exports.getGroupById = getGroupById;
+const addGroupMember = async (req, res) => {
+    try {
+        const { groupId } = req.params;
+        const { userId } = req.body;
+        const requesterId = req.user.id;
+        if (!userId) {
+            return res.status(400).json({ message: 'userId is required' });
+        }
+        const memberCheck = await (0, database_1.query)('SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2', [groupId, requesterId]);
+        if (memberCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'Group not found or not a member' });
+        }
+        const userCheck = await (0, database_1.query)('SELECT id FROM users WHERE id = $1', [userId]);
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const existsCheck = await (0, database_1.query)('SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2', [groupId, userId]);
+        if (existsCheck.rows.length > 0) {
+            return res.status(400).json({ message: 'User is already a member' });
+        }
+        await (0, database_1.query)(`INSERT INTO group_members (group_id, user_id, role)
+       VALUES ($1, $2, 'member')`, [groupId, userId]);
+        const newMember = await (0, database_1.query)(`SELECT u.id, u.name, u.email
+       FROM users u WHERE u.id = $1`, [userId]);
+        res.status(201).json({
+            id: newMember.rows[0].id,
+            name: newMember.rows[0].name,
+            email: newMember.rows[0].email,
+            role: 'member',
+        });
+    }
+    catch (error) {
+        console.error('Add group member error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+exports.addGroupMember = addGroupMember;
 const deleteGroup = async (req, res) => {
     try {
         const { groupId } = req.params;

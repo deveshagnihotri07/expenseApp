@@ -270,22 +270,28 @@ exports.updateExpense = updateExpense;
 const getExpenses = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { groupId, personal } = req.query;
-        let result;
+        const { groupId } = req.query;
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+        const offset = (page - 1) * limit;
+        let whereClause;
+        const params = [];
         if (groupId) {
-            result = await (0, database_1.query)(`SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-         FROM expenses e
-         LEFT JOIN categories c ON e.category_id = c.id
-         WHERE e.group_id = $1
-         ORDER BY e.created_at DESC`, [groupId]);
+            whereClause = 'e.group_id = $1';
+            params.push(groupId);
         }
         else {
-            result = await (0, database_1.query)(`SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-         FROM expenses e
-         LEFT JOIN categories c ON e.category_id = c.id
-         WHERE e.created_by = $1 AND e.is_personal = true
-         ORDER BY e.created_at DESC`, [userId]);
+            whereClause = 'e.created_by = $1 AND e.is_personal = true';
+            params.push(userId);
         }
+        const countResult = await (0, database_1.query)(`SELECT COUNT(*) as total FROM expenses e WHERE ${whereClause}`, params);
+        const total = parseInt(countResult.rows[0].total, 10);
+        const result = await (0, database_1.query)(`SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+       FROM expenses e
+       LEFT JOIN categories c ON e.category_id = c.id
+       WHERE ${whereClause}
+       ORDER BY e.expense_date DESC, e.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, limit, offset]);
         const expenses = await Promise.all(result.rows.map(async (expense) => {
             const splitsResult = await (0, database_1.query)(`SELECT es.user_id, es.amount, es.share_type, es.is_settled,
                   u.name, u.email
@@ -320,7 +326,13 @@ const getExpenses = async (req, res) => {
                 })),
             };
         }));
-        res.json(expenses);
+        res.json({
+            expenses,
+            total,
+            page,
+            limit,
+            hasMore: page * limit < total,
+        });
     }
     catch (error) {
         console.error('Get expenses error:', error);
