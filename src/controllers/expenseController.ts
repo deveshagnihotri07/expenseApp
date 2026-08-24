@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { query } from '../config/database';
+import { query, getClient } from '../config/database';
 
 interface SplitInput {
   userId: string;
@@ -74,28 +74,10 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'Personal expenses must be paid by you' });
     }
 
-    const client = await query('BEGIN');
+    const client = await getClient();
 
     try {
-      let splitAmounts: SplitInput[] = [];
-
-      if (splitMethod === 'equal') {
-        const perPerson = amount / splits.length;
-        splitAmounts = splits.map((s: SplitInput) => ({ userId: s.userId }));
-      } else if (splitMethod === 'percentage') {
-        splitAmounts = splits;
-      } else if (splitMethod === 'exact') {
-        splitAmounts = splits;
-      } else {
-        const totalShares = splits.reduce(
-          (sum: number, s: any) => sum + (s.share || 0),
-          0
-        );
-        splitAmounts = splits.map((s: any) => ({
-          userId: s.userId,
-          share: s.share,
-        }));
-      }
+      await client.query('BEGIN');
 
       let splitRecords: { userId: string; amount: number }[] = [];
 
@@ -126,7 +108,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
         }));
       }
 
-      const expenseResult = await query(
+      const expenseResult = await client.query(
         `INSERT INTO expenses (description, amount, currency, category_id, group_id, created_by, expense_date, is_personal)
          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, CURRENT_DATE), $8) RETURNING *`,
         [
@@ -144,14 +126,15 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
       const expense = expenseResult.rows[0];
 
       for (const split of splitRecords) {
-        await query(
+        await client.query(
           `INSERT INTO expense_splits (expense_id, user_id, amount, share_type)
            VALUES ($1, $2, $3, $4)`,
           [expense.id, split.userId, split.amount, splitMethod]
         );
       }
 
-      await query('COMMIT');
+      await client.query('COMMIT');
+      client.release();
 
       res.status(201).json({
         id: expense.id,
@@ -166,7 +149,12 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
         createdAt: expense.created_at,
       });
     } catch (error) {
-      await query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // connection may already be broken
+      }
+      client.release();
       throw error;
     }
   } catch (error) {
@@ -280,10 +268,12 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
       }));
     }
 
-    await query('BEGIN');
+    const client = await getClient();
 
     try {
-      await query(
+      await client.query('BEGIN');
+
+      await client.query(
         `UPDATE expenses
          SET description = $1, amount = $2, currency = $3, category_id = $4,
              group_id = $5, is_personal = $6, created_by = $7,
@@ -302,21 +292,27 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
         ]
       );
 
-      await query('DELETE FROM expense_splits WHERE expense_id = $1', [
+      await client.query('DELETE FROM expense_splits WHERE expense_id = $1', [
         expenseId,
       ]);
 
       for (const split of splitRecords) {
-        await query(
+        await client.query(
           `INSERT INTO expense_splits (expense_id, user_id, amount, share_type)
            VALUES ($1, $2, $3, $4)`,
           [expenseId, split.userId, split.amount, splitMethod]
         );
       }
 
-      await query('COMMIT');
+      await client.query('COMMIT');
+      client.release();
     } catch (error) {
-      await query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // connection may already be broken
+      }
+      client.release();
       throw error;
     }
 

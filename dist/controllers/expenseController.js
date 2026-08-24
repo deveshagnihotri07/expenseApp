@@ -44,26 +44,9 @@ const createExpense = async (req, res) => {
         else if (paidBy !== userId) {
             return res.status(400).json({ message: 'Personal expenses must be paid by you' });
         }
-        const client = await (0, database_1.query)('BEGIN');
+        const client = await (0, database_1.getClient)();
         try {
-            let splitAmounts = [];
-            if (splitMethod === 'equal') {
-                const perPerson = amount / splits.length;
-                splitAmounts = splits.map((s) => ({ userId: s.userId }));
-            }
-            else if (splitMethod === 'percentage') {
-                splitAmounts = splits;
-            }
-            else if (splitMethod === 'exact') {
-                splitAmounts = splits;
-            }
-            else {
-                const totalShares = splits.reduce((sum, s) => sum + (s.share || 0), 0);
-                splitAmounts = splits.map((s) => ({
-                    userId: s.userId,
-                    share: s.share,
-                }));
-            }
+            await client.query('BEGIN');
             let splitRecords = [];
             if (splitMethod === 'equal') {
                 const perPerson = amount / splits.length;
@@ -91,7 +74,7 @@ const createExpense = async (req, res) => {
                     amount: parseFloat(((s.share / totalShares) * amount).toFixed(2)),
                 }));
             }
-            const expenseResult = await (0, database_1.query)(`INSERT INTO expenses (description, amount, currency, category_id, group_id, created_by, expense_date, is_personal)
+            const expenseResult = await client.query(`INSERT INTO expenses (description, amount, currency, category_id, group_id, created_by, expense_date, is_personal)
          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, CURRENT_DATE), $8) RETURNING *`, [
                 description || null,
                 amount,
@@ -104,10 +87,11 @@ const createExpense = async (req, res) => {
             ]);
             const expense = expenseResult.rows[0];
             for (const split of splitRecords) {
-                await (0, database_1.query)(`INSERT INTO expense_splits (expense_id, user_id, amount, share_type)
+                await client.query(`INSERT INTO expense_splits (expense_id, user_id, amount, share_type)
            VALUES ($1, $2, $3, $4)`, [expense.id, split.userId, split.amount, splitMethod]);
             }
-            await (0, database_1.query)('COMMIT');
+            await client.query('COMMIT');
+            client.release();
             res.status(201).json({
                 id: expense.id,
                 description: expense.description,
@@ -122,7 +106,13 @@ const createExpense = async (req, res) => {
             });
         }
         catch (error) {
-            await (0, database_1.query)('ROLLBACK');
+            try {
+                await client.query('ROLLBACK');
+            }
+            catch {
+                // connection may already be broken
+            }
+            client.release();
             throw error;
         }
     }
@@ -212,9 +202,10 @@ const updateExpense = async (req, res) => {
                 amount: parseFloat(((s.share / totalShares) * amount).toFixed(2)),
             }));
         }
-        await (0, database_1.query)('BEGIN');
+        const client = await (0, database_1.getClient)();
         try {
-            await (0, database_1.query)(`UPDATE expenses
+            await client.query('BEGIN');
+            await client.query(`UPDATE expenses
          SET description = $1, amount = $2, currency = $3, category_id = $4,
              group_id = $5, is_personal = $6, created_by = $7,
              expense_date = COALESCE($8, expense_date), updated_at = NOW()
@@ -229,17 +220,24 @@ const updateExpense = async (req, res) => {
                 expenseDate || null,
                 expenseId,
             ]);
-            await (0, database_1.query)('DELETE FROM expense_splits WHERE expense_id = $1', [
+            await client.query('DELETE FROM expense_splits WHERE expense_id = $1', [
                 expenseId,
             ]);
             for (const split of splitRecords) {
-                await (0, database_1.query)(`INSERT INTO expense_splits (expense_id, user_id, amount, share_type)
+                await client.query(`INSERT INTO expense_splits (expense_id, user_id, amount, share_type)
            VALUES ($1, $2, $3, $4)`, [expenseId, split.userId, split.amount, splitMethod]);
             }
-            await (0, database_1.query)('COMMIT');
+            await client.query('COMMIT');
+            client.release();
         }
         catch (error) {
-            await (0, database_1.query)('ROLLBACK');
+            try {
+                await client.query('ROLLBACK');
+            }
+            catch {
+                // connection may already be broken
+            }
+            client.release();
             throw error;
         }
         const result = await (0, database_1.query)(`SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
