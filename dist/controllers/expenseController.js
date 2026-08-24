@@ -282,8 +282,29 @@ const getExpenses = async (req, res) => {
             whereClause = 'e.created_by = $1 AND e.is_personal = true';
             params.push(userId);
         }
+        const month = req.query.month ? parseInt(req.query.month, 10) : null;
+        const year = req.query.year ? parseInt(req.query.year, 10) : null;
+        if (month && month >= 1 && month <= 12 && year) {
+            params.push(month, year);
+            whereClause += ` AND EXTRACT(MONTH FROM e.expense_date) = $${params.length - 1}
+                       AND EXTRACT(YEAR FROM e.expense_date) = $${params.length}`;
+        }
         const countResult = await (0, database_1.query)(`SELECT COUNT(*) as total FROM expenses e WHERE ${whereClause}`, params);
         const total = parseInt(countResult.rows[0].total, 10);
+        const summaryResult = await (0, database_1.query)(`SELECT COALESCE(SUM(e.amount), 0) as total_amount,
+              COUNT(*) as expense_count,
+              COALESCE(SUM(CASE WHEN e.expense_date >= CURRENT_DATE
+                           AND e.expense_date < CURRENT_DATE + INTERVAL '1 day'
+                          THEN e.amount ELSE 0 END), 0) as today_amount,
+              COALESCE(SUM(CASE WHEN e.is_settled = false THEN e.amount ELSE 0 END), 0) as unsettled_amount
+       FROM expenses e WHERE ${whereClause}`, params);
+        const s = summaryResult.rows[0];
+        const categorySummaryResult = await (0, database_1.query)(`SELECT c.name, c.icon, c.color, SUM(e.amount) as amount
+       FROM expenses e
+       LEFT JOIN categories c ON e.category_id = c.id
+       WHERE ${whereClause}
+       GROUP BY c.name, c.icon, c.color
+       ORDER BY amount DESC`, params);
         const result = await (0, database_1.query)(`SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
        FROM expenses e
        LEFT JOIN categories c ON e.category_id = c.id
@@ -330,6 +351,18 @@ const getExpenses = async (req, res) => {
             page,
             limit,
             hasMore: page * limit < total,
+            summary: {
+                totalAmount: parseFloat(s.total_amount) || 0,
+                expenseCount: parseInt(s.expense_count, 10) || 0,
+                todayAmount: parseFloat(s.today_amount) || 0,
+                unsettledAmount: parseFloat(s.unsettled_amount) || 0,
+                categories: categorySummaryResult.rows.map((row) => ({
+                    name: row.name || 'Other',
+                    icon: row.icon,
+                    color: row.color,
+                    amount: parseFloat(row.amount) || 0,
+                })),
+            },
         });
     }
     catch (error) {

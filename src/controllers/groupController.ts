@@ -112,13 +112,45 @@ export const getGroupById = async (req: AuthRequest, res: Response) => {
       [group.id]
     );
 
+    let dateFilter = '';
+    const expenseParams: any[] = [group.id];
+    const month = req.query.month ? parseInt(req.query.month as string, 10) : null;
+    const year = req.query.year ? parseInt(req.query.year as string, 10) : null;
+    if (month && month >= 1 && month <= 12 && year) {
+      expenseParams.push(month, year);
+      dateFilter = ` AND EXTRACT(MONTH FROM e.expense_date) = $${expenseParams.length - 1}
+                     AND EXTRACT(YEAR FROM e.expense_date) = $${expenseParams.length}`;
+    }
+
+    const summaryResult = await query(
+      `SELECT COALESCE(SUM(e.amount), 0) as total_amount,
+              COUNT(*) as expense_count,
+              COALESCE(SUM(CASE WHEN e.expense_date >= CURRENT_DATE
+                           AND e.expense_date < CURRENT_DATE + INTERVAL '1 day'
+                          THEN e.amount ELSE 0 END), 0) as today_amount
+       FROM expenses e
+       WHERE e.group_id = $1 ${dateFilter}`,
+      expenseParams
+    );
+    const s = summaryResult.rows[0];
+
+    const categorySummaryResult = await query(
+      `SELECT c.name, c.icon, c.color, SUM(e.amount) as amount
+       FROM expenses e
+       LEFT JOIN categories c ON e.category_id = c.id
+       WHERE e.group_id = $1 ${dateFilter}
+       GROUP BY c.name, c.icon, c.color
+       ORDER BY amount DESC`,
+      expenseParams
+    );
+
     const expensesResult = await query(
       `SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
        FROM expenses e
        LEFT JOIN categories c ON e.category_id = c.id
-       WHERE e.group_id = $1
+       WHERE e.group_id = $1 ${dateFilter}
        ORDER BY e.expense_date DESC, e.created_at DESC`,
-      [group.id]
+      expenseParams
     );
 
     const expensesWithSplits = await Promise.all(
@@ -173,6 +205,17 @@ export const getGroupById = async (req: AuthRequest, res: Response) => {
         role: m.role,
       })),
       expenses: expensesWithSplits,
+      summary: {
+        totalAmount: parseFloat(s.total_amount) || 0,
+        expenseCount: parseInt(s.expense_count, 10) || 0,
+        todayAmount: parseFloat(s.today_amount) || 0,
+        categories: categorySummaryResult.rows.map((row: any) => ({
+          name: row.name || 'Other',
+          icon: row.icon,
+          color: row.color,
+          amount: parseFloat(row.amount) || 0,
+        })),
+      },
     });
   } catch (error) {
     console.error('Get group by id error:', error);

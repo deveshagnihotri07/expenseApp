@@ -10,6 +10,16 @@ const spendTypeFilter = (type: string) => {
   return '';
 };
 
+const monthYearFilter = (req: AuthRequest) => {
+  const month = req.query.month ? parseInt(req.query.month as string, 10) : null;
+  const year = req.query.year ? parseInt(req.query.year as string, 10) : null;
+  if (month && month >= 1 && month <= 12 && year) {
+    return `AND EXTRACT(MONTH FROM e.expense_date) = ${month}
+            AND EXTRACT(YEAR FROM e.expense_date) = ${year}`;
+  }
+  return '';
+};
+
 const computeFriendBalances = async (userId: string) => {
     const splitsAllResult = await query(
       `SELECT e.id, e.created_by, es.user_id as split_user_id, es.amount as split_amount
@@ -94,6 +104,7 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
     const type = (req.query.type as string) || 'both';
     const typeFilter = spendTypeFilter(type);
+    const monthFilter = monthYearFilter(req);
 
     const expenseResult = await query(
       `SELECT es.amount, e.currency, e.created_at, e.expense_date, e.is_personal, e.group_id,
@@ -101,7 +112,7 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response) => {
        FROM expense_splits es
        JOIN expenses e ON es.expense_id = e.id
        LEFT JOIN categories c ON e.category_id = c.id
-       WHERE es.user_id = $1 ${typeFilter}`,
+       WHERE es.user_id = $1 ${typeFilter} ${monthFilter}`,
       [userId]
     );
 
@@ -135,6 +146,11 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    const selectedMonth = req.query.month ? parseInt(req.query.month as string, 10) : null;
+    const selectedYear = req.query.year ? parseInt(req.query.year as string, 10) : null;
+    const hasSelectedMonth =
+      selectedMonth && selectedMonth >= 1 && selectedMonth <= 12 && selectedYear;
+
     const thisMonthResult = await query(
       `SELECT
          COALESCE(SUM(CASE WHEN e.is_personal THEN es.amount ELSE 0 END), 0) as personal,
@@ -142,8 +158,11 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response) => {
        FROM expense_splits es
        JOIN expenses e ON es.expense_id = e.id
        WHERE es.user_id = $1
-         AND e.expense_date >= date_trunc('month', CURRENT_DATE)
-         AND e.expense_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'`,
+         ${hasSelectedMonth
+           ? `AND EXTRACT(MONTH FROM e.expense_date) = ${selectedMonth}
+              AND EXTRACT(YEAR FROM e.expense_date) = ${selectedYear}`
+           : `AND e.expense_date >= date_trunc('month', CURRENT_DATE)
+              AND e.expense_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'`}`,
       [userId]
     );
     const thisMonth = thisMonthResult.rows[0];
@@ -154,7 +173,7 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response) => {
       `SELECT TO_CHAR(e.expense_date, 'YYYY-MM-DD') as date, SUM(es.amount) as total
        FROM expense_splits es
        JOIN expenses e ON es.expense_id = e.id
-       WHERE es.user_id = $1 ${typeFilter}
+       WHERE es.user_id = $1 ${typeFilter} ${monthFilter}
        GROUP BY date
        ORDER BY date ASC`,
       [userId]
@@ -215,6 +234,10 @@ export const getCategoryAnalytics = async (req: AuthRequest, res: Response) => {
       dateFilter = `AND e.expense_date >= CURRENT_DATE - INTERVAL '1 year'`;
     } else if (period === 'month') {
       dateFilter = `AND e.expense_date >= CURRENT_DATE - INTERVAL '1 month'`;
+    }
+    const monthFilter = monthYearFilter(req);
+    if (monthFilter) {
+      dateFilter = monthFilter;
     }
 
     const result = await query(
