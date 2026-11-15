@@ -8,6 +8,7 @@ import groupRoutes from './routes/groupRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
+import healthRoutes from './routes/healthRoutes';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
 dotenv.config();
@@ -28,6 +29,8 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
