@@ -8,6 +8,7 @@ const http_1 = __importDefault(require("http"));
 const app_1 = __importDefault(require("./app"));
 const database_1 = __importDefault(require("./config/database"));
 const seedTestUsers_1 = require("./utils/seedTestUsers");
+const keepAlive_1 = require("./utils/keepAlive");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
@@ -40,6 +41,7 @@ const startServer = async () => {
     server.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on port ${PORT}`);
         console.log(`Accessible at http://<your-ip>:${PORT}/api`);
+        (0, keepAlive_1.startKeepAlive)();
     });
 };
 startServer();

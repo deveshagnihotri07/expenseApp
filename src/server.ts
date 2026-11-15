@@ -3,6 +3,7 @@ import http from 'http';
 import app from './app';
 import pool from './config/database';
 import { seedTestUsers } from './utils/seedTestUsers';
+import { startKeepAlive } from './utils/keepAlive';
 import fs from 'fs';
 import path from 'path';
 
@@ -43,6 +44,7 @@ const startServer = async () => {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Accessible at http://<your-ip>:${PORT}/api`);
+    startKeepAlive();
   });
 };
 
